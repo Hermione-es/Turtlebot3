@@ -8,16 +8,18 @@ const uint8_t LEFT_ID = 2;
 const float DXL_PROTOCOL_VERSION = 2.0;
 HardwareTimer Timer(TIMER_CH1);
 
-int present_Lpos = 0;
-int present_Rpos = 0;
-int new_Lpos = 0;
-int new_Rpos = 0;
-int dif_Lpos = 0;
-int dif_Rpos = 0;
-int dis_L = 0;
-int dis_R = 0;
-int new_dis = 0;
-int total_dis = 0;
+
+float present_Lpos;
+float present_Rpos;
+float new_Lpos;
+float new_Rpos;
+float dif_Lpos;
+float dif_Rpos;
+float dis_L;
+float dis_R;
+float new_dis;
+float total_dis = 0;
+float total_dis_cm = 0;
 
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
@@ -36,23 +38,27 @@ void setup() {
 
   dxl.torqueOff(LEFT_ID);
   dxl.torqueOff(RIGHT_ID);
-  dxl.setOperatingMode(LEFT_ID, OP_POSITION);
-  dxl.setOperatingMode(RIGHT_ID, OP_POSITION);
+  dxl.setOperatingMode(LEFT_ID, OP_VELOCITY);
+  dxl.setOperatingMode(RIGHT_ID, OP_VELOCITY);
   dxl.torqueOn(LEFT_ID);
   dxl.torqueOn(RIGHT_ID);
 
+  dxl.setGoalVelocity(LEFT_ID, 0);
+  dxl.setGoalVelocity(RIGHT_ID, 0);
+  
+  new_Lpos = dxl.getPresentPosition(LEFT_ID);
+  new_Rpos = dxl.getPresentPosition(RIGHT_ID);
 
-  dxl.setGoalVelocity(LEFT_ID, 10);
-  dxl.setGoalVelocity(RIGHT_ID, 10);
   
   Timer.stop();
-  Timer.setPeriod(2000000);
+  Timer.setPeriod(1000000);
   Timer.attachInterrupt(measure_dis);
   Timer.start();
 
 }
 
 void loop() {
+
   
 }
 
@@ -67,17 +73,20 @@ void measure_dis()
   DEBUG_SERIAL.print(" , ");
   DEBUG_SERIAL.println(dxl.getPresentVelocity(RIGHT_ID));
   
-  new_Lpos = dxl.getPresentPosition(LEFT_ID);
-  new_Rpos = dxl.getPresentPosition(RIGHT_ID);
-  dif_Lpos = new_Lpos - present_Lpos;
-  dif_Rpos = new_Rpos - present_Rpos;
+  
+  dif_Lpos = present_Lpos - new_Lpos;
+  dif_Rpos = present_Rpos - new_Rpos;
       
-  dis_L = dif_Lpos * 0.0002;
-  dis_R = dif_Rpos * 0.0002;
+  dis_L = dif_Lpos * 0.002;
+  dis_R = dif_Rpos * 0.002;
   new_dis = (dis_L + dis_R) / 2;
   total_dis += new_dis;
+  total_dis_cm = total_dis*2.54;
       
   DEBUG_SERIAL.print("Total distance : ");
-  DEBUG_SERIAL.println(total_dis);
+  DEBUG_SERIAL.println(total_dis_cm);
+
+  new_Lpos = dxl.getPresentPosition(LEFT_ID);
+  new_Rpos = dxl.getPresentPosition(RIGHT_ID);
 
 }
