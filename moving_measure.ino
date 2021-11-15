@@ -8,7 +8,12 @@ const uint8_t LEFT_ID = 2;
 const float DXL_PROTOCOL_VERSION = 2.0;
 HardwareTimer Timer(TIMER_CH1);
 
-
+float L_Vel;
+float R_Vel;
+float L_RPM;
+float R_RPM;
+float lin_Vel;
+float ang_Vel;
 float present_Lpos;
 float present_Rpos;
 float new_Lpos;
@@ -17,13 +22,12 @@ float dif_Lpos;
 float dif_Rpos;
 float dis_L;
 float dis_R;
-float new_dis;
-float total_dis = 0;
-float total_dis_cm_abs = 0;
-float new_deg;
-float total_deg = 0;
-float total_deg_edit = 0;
-float total_deg_edit_abs = 0;
+float dis = 0;
+float deg = 0;
+float new_x;
+float new_y;
+float x = 0;
+float y = 0;
 
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
@@ -58,7 +62,7 @@ void setup() {
   
   Timer.stop();
   Timer.setPeriod(1000000);
-  Timer.attachInterrupt(measure_disdeg);
+  Timer.attachInterrupt(coordinate);
   Timer.start();
 
 }
@@ -68,40 +72,51 @@ void loop() {
   
 }
 
-void measure_disdeg()
+void coordinate()
 {
     
   present_Lpos = dxl.getPresentPosition(LEFT_ID);
   present_Rpos = dxl.getPresentPosition(RIGHT_ID);
+
+  L_RPM = dxl.getPresentVelocity(LEFT_ID,UNIT_RPM);
+  R_RPM = dxl.getPresentVelocity(RIGHT_ID,UNIT_RPM);
+
+  L_Vel = 2 * 3.141592 * 0.066 * L_RPM / 60;
+  R_Vel = 2 * 3.141592 * 0.066 * R_RPM / 60;
   
-  DEBUG_SERIAL.print("Present Velocity(raw) : ");
-  DEBUG_SERIAL.print(dxl.getPresentVelocity(LEFT_ID));
-  DEBUG_SERIAL.print(" , ");
-  DEBUG_SERIAL.println(dxl.getPresentVelocity(RIGHT_ID));
+  lin_Vel = (L_Vel + R_Vel) /2;
+  ang_Vel = (R_Vel - L_Vel) /0.16 /0.066 ;
   
+  DEBUG_SERIAL.print("Robot's Linear Velocity(m/s) : ");
+  DEBUG_SERIAL.print(lin_Vel);
+  DEBUG_SERIAL.print("  ,  ");
+  DEBUG_SERIAL.print("Robot's Angualr Velocity(m/s) : ");
+  DEBUG_SERIAL.println(ang_Vel);
   
   dif_Lpos = present_Lpos - new_Lpos;
   dif_Rpos = present_Rpos - new_Rpos;
       
-  dis_L = dif_Lpos * 0.002 * 2.54;
-  dis_R = dif_Rpos * 0.002 * 2.54;
+  dis_L = dif_Lpos * 0.00002 * 2.54;
+  dis_R = dif_Rpos * 0.00002 * 2.54;
   
-  new_dis = (dis_L + dis_R) / 2;
-  total_dis += new_dis;
-  total_dis_cm_abs = abs(total_dis);
+  dis = (dis_L + dis_R) / 2;
+  deg = ((dis_R - dis_L) / 160) * 57.2958 * 100;
 
-  new_deg = ((dis_R - dis_L) / 160) * 57.2958;
-  total_deg += new_deg;
-  total_deg_edit = total_deg * 100;
-  total_deg_edit_abs = abs(total_deg_edit);
+  new_x = sin(deg) * dis;
+  new_y = cos(deg) * dis;
+
+  x += new_x;
+  y += new_y;
       
-  DEBUG_SERIAL.print("Total distance : ");
-  DEBUG_SERIAL.println(total_dis_cm_abs);
-
-  DEBUG_SERIAL.print("Total degree : ");
-  DEBUG_SERIAL.println(total_deg_edit_abs);
+  DEBUG_SERIAL.print("x-coordinate : ");
+  DEBUG_SERIAL.print(x);
+  DEBUG_SERIAL.print("  ,  ");
+  DEBUG_SERIAL.print("y-coordinate : ");
+  DEBUG_SERIAL.println(y);
 
   new_Lpos = dxl.getPresentPosition(LEFT_ID);
   new_Rpos = dxl.getPresentPosition(RIGHT_ID);
+
+
 
 }
