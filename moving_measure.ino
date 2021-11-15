@@ -90,7 +90,7 @@ void coordinate()
   DEBUG_SERIAL.print("Robot's Linear Velocity(m/s) : ");
   DEBUG_SERIAL.print(lin_Vel);
   DEBUG_SERIAL.print("  ,  ");
-  DEBUG_SERIAL.print("Robot's Angualr Velocity(m/s) : ");
+  DEBUG_SERIAL.print("Robot's Angualr Velocity(rad/s) : ");
   DEBUG_SERIAL.println(ang_Vel);
   
   dif_Lpos = present_Lpos - new_Lpos;
