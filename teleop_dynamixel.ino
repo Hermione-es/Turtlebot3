@@ -51,8 +51,8 @@ void twistMessageReceived(const geometry_msgs::Twist& msg)
   set_ang = msg.angular.z;
   set_Lvel = set_lin + 0.16 * set_ang;
   set_Rvel = set_lin - 0.16 * set_ang;
-  set_LRPM = set_Lvel * 60 / 2 / 3.141592 / 0.066;
-  set_RRPM = set_Rvel * 60 / 2 / 3.141592 / 0.066;
+  set_LRPM = set_Lvel * 60 / 2 / 3.141592 / 0.033;
+  set_RRPM = set_Rvel * 60 / 2 / 3.141592 / 0.033;
   
   dxl.setGoalVelocity(LEFT_ID, set_LRPM, UNIT_RPM);
   dxl.setGoalVelocity(RIGHT_ID, set_RRPM, UNIT_RPM);
@@ -110,8 +110,8 @@ void coordinate()
   present_Rpos = dxl.getPresentPosition(RIGHT_ID);
   L_RPM = dxl.getPresentVelocity(LEFT_ID,UNIT_RPM);
   R_RPM = dxl.getPresentVelocity(RIGHT_ID,UNIT_RPM);
-  L_Vel = 2 * 3.141592 * 0.066 * L_RPM / 60;
-  R_Vel = 2 * 3.141592 * 0.066 * R_RPM / 60;
+  L_Vel = 2 * 3.141592 * 0.033 * L_RPM / 60;
+  R_Vel = 2 * 3.141592 * 0.033 * R_RPM / 60;
   lin_Vel = (R_Vel + L_Vel) /2;
   ang_Vel = (R_Vel - L_Vel) /0.16;
   DEBUG_SERIAL.print("Robot's Linear Velocity(m/s) : ");
