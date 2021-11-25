@@ -38,22 +38,27 @@ float set_lin;
 float set_ang;
 float set_Lvel;
 float set_Rvel;
+float set_LRPM;
+float set_RRPM;
 
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 using namespace ControlTableItem;
 
 void twistMessageReceived(const geometry_msgs::Twist& msg)
 {
+  
   set_lin = msg.linear.x;
   set_ang = msg.angular.z;
-  set_Lvel = set_lin - 0.00528 * set_ang;
-  set_Rvel = set_lin + 0.00528 * set_ang;
+  set_Lvel = set_lin + 0.16 * set_ang;
+  set_Rvel = set_lin - 0.16 * set_ang;
+  set_LRPM = set_Lvel * 60 / 2 / 3.141592 / 0.066;
+  set_RRPM = set_Rvel * 60 / 2 / 3.141592 / 0.066;
   
-  dxl.setGoalVelocity(LEFT_ID, set_Lvel);
-  dxl.setGoalVelocity(RIGHT_ID, set_Rvel);
+  dxl.setGoalVelocity(LEFT_ID, set_LRPM, UNIT_RPM);
+  dxl.setGoalVelocity(RIGHT_ID, set_RRPM, UNIT_RPM);
   new_Lpos = dxl.getPresentPosition(LEFT_ID);
   new_Rpos = dxl.getPresentPosition(RIGHT_ID);
-  
+
 }
 
 ros::NodeHandle nh;
@@ -61,12 +66,12 @@ ros::Subscriber<geometry_msgs::Twist> teleop_sub("cmd_vel",&twistMessageReceived
 
 void setup() 
 {
-  Serial.begin(11520);
+  Serial.begin(115200);
   
   nh.initNode();
   mpu.begin();
 
-  DEBUG_SERIAL.begin(11520);
+  DEBUG_SERIAL.begin(115200);
   dxl.begin(1000000);
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
   dxl.ping(RIGHT_ID);
@@ -79,14 +84,13 @@ void setup()
   dxl.torqueOn(RIGHT_ID);
   dxl.writeControlTableItem(DRIVE_MODE, LEFT_ID, 0);
   dxl.writeControlTableItem(DRIVE_MODE, RIGHT_ID, 0);
+  nh.subscribe(teleop_sub);
 }
 
 
 
 void loop()
 {
-  
-  nh.subscribe(teleop_sub);
   
   static uint32_t pre_time;
 
@@ -109,12 +113,12 @@ void coordinate()
   L_Vel = 2 * 3.141592 * 0.066 * L_RPM / 60;
   R_Vel = 2 * 3.141592 * 0.066 * R_RPM / 60;
   lin_Vel = (R_Vel + L_Vel) /2;
-  ang_Vel = (R_Vel - L_Vel) /0.16 /0.066 ;
+  ang_Vel = (R_Vel - L_Vel) /0.16;
   DEBUG_SERIAL.print("Robot's Linear Velocity(m/s) : ");
-  DEBUG_SERIAL.print(lin_Vel);
-  DEBUG_SERIAL.print(" , ");
+  DEBUG_SERIAL.println(lin_Vel);
   DEBUG_SERIAL.print("Robot's Angualr Velocity(rad/s) : ");
   DEBUG_SERIAL.println(ang_Vel);
+  DEBUG_SERIAL.println();
   
   dif_Lpos = present_Lpos - new_Lpos;
   dif_Rpos = present_Rpos - new_Rpos;
@@ -126,11 +130,11 @@ void coordinate()
   new_y = cos(deg) * dis;
   x += new_x;
   y += new_y;
-  DEBUG_SERIAL.print("x-coordinate : ");
-  DEBUG_SERIAL.print(x);
-  DEBUG_SERIAL.print(" , ");
-  DEBUG_SERIAL.print("y-coordinate : ");
-  DEBUG_SERIAL.println(y);
+//  DEBUG_SERIAL.print("x-coordinate : ");
+//  DEBUG_SERIAL.print(x);
+//  DEBUG_SERIAL.print(" , ");
+//  DEBUG_SERIAL.print("y-coordinate : ");
+//  DEBUG_SERIAL.println(y);
   
   new_Lpos = dxl.getPresentPosition(LEFT_ID);
   new_Rpos = dxl.getPresentPosition(RIGHT_ID);
