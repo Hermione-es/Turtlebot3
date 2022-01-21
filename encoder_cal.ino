@@ -3,6 +3,7 @@
 #include <geometry_msgs/Twist.h>
 #include <sensor_msgs/Imu.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <std_msgs/Float64.h>
 #include <tf/tf.h>
 #include <tf/transform_broadcaster.h>
 #include <math.h>
@@ -33,8 +34,8 @@ double encoder_yaw_q[4];
 double encoder_yaw_new = 0;
 double cnt_Lpos;
 double cnt_Rpos;
-double prev_Lpos;
-double prev_Rpos;
+double prev_Lpos=0;
+double prev_Rpos=0;
 double dif_Lpos;
 double dif_Rpos;
 double dis_L;
@@ -59,45 +60,9 @@ double wheel_rad = 0.033; //turtlebot3_burger's radius
 double G = 1; // turtlebot3 gear ratio (XL430-W250)
 double Re = 4096; // turtlebot3 encoder's resolution (XL430-W250)
 double thick_F = (wheel_rad*2*PI)/(G*Re) *10000;
-double thick_deg = 360 / Re; //[deg/pulse]
-double thick_rad = thick_deg * PI / 180; //deg2rad
 
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 using namespace ControlTableItem;
-
-double gyro[3];
-double acc[3];
-double mag[3];
-double quat[4];
-double posx[3] = {0, 0, 0};
-double posy[3] = {0, 0, 0};
-double pospx[3];
-double pospy[3];
-double H[12];
-double H2[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
-double H3[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-double Q[16] = {1e-6, 0, 0, 0, 0, 1e-6, 0, 0, 0, 0, 1e-6, 0, 0, 0, 0, 1e-6};
-double Q3[9] = {1e-6, 0, 0, 0, 1e-6, 0, 0, 0, 1e-6};
-double R[9] = {2, 0, 0, 0, 2, 0, 0, 0, 2};
-double V[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-double P[16] = {0.001, 0, 0, 0, 0, 0.001, 0, 0, 0, 0, 0.001, 0, 0, 0, 0, 0.001};
-double P3x[9];
-double P3y[9];
-double A[16];
-double K[12];
-double K2[16];
-double K3x[9];
-double K3y[9];
-double x[4] = {1, 0, 0, 0};
-double xp[4];
-double z1[3];
-double z2[4];
-double z3[3];
-double z4[3];
-double h[3];
-
-double local_acc_x = 0;
-double local_acc_y = 0;
 
 void twistMessageReceived(const geometry_msgs::Twist& msg)
 {
@@ -117,8 +82,10 @@ void twistMessageReceived(const geometry_msgs::Twist& msg)
 ros::NodeHandle nh;
 sensor_msgs::Imu imu_msg;
 geometry_msgs::PoseStamped pose_msg;
+std_msgs::Float64 yaw_msg;
 ros::Publisher imu_pub("kalamn_orientation", &imu_msg);
 ros::Publisher pose_pub("pose", &pose_msg);
+ros::Publisher yaw_pub("yaw", &yaw_msg);
 geometry_msgs::TransformStamped tfs_msg;
 tf::TransformBroadcaster tfbroadcaster;
 ros::Subscriber<geometry_msgs::Twist> teleop_sub("cmd_vel",&twistMessageReceived);
@@ -149,19 +116,10 @@ void setup()
   dxl.writeControlTableItem(DRIVE_MODE, LEFT_ID, 0);
   dxl.writeControlTableItem(DRIVE_MODE, RIGHT_ID, 0);
   nh.subscribe(teleop_sub);
-  
+
+  //initial value set
   prev_Lpos = dxl.getPresentPosition(LEFT_ID);
   prev_Rpos = dxl.getPresentPosition(RIGHT_ID);
-
-  dif_Lpos = prev_Lpos;
-  dif_Rpos = prev_Rpos;
-  dis_L = dif_Lpos * thick_F /10000;
-  dis_R = dif_Rpos * thick_F /10000;
-  dis = (dis_L + dis_R) / 2;
-  
-  encoder_yaw = (dis_R - dis_L) / wheel_wid;
-  dxl_x = dis*cos(encoder_yaw);
-  dxl_y = dis*sin(encoder_yaw);
 }
 
 void loop()
@@ -178,22 +136,19 @@ void loop()
 
 void coordinate()
 {
+
   cnt_Lpos = dxl.getPresentPosition(LEFT_ID);
   cnt_Rpos = dxl.getPresentPosition(RIGHT_ID);
   L_RPM = dxl.getPresentVelocity(LEFT_ID,UNIT_RPM);
   R_RPM = dxl.getPresentVelocity(RIGHT_ID,UNIT_RPM);
-  L_Vel = 2 * PI * wheel_rad * L_RPM / 60; //RPM to RAW
-  R_Vel = 2 * PI * wheel_rad * R_RPM / 60; //RPM to RAW
-  lin_Vel = (L_Vel + R_Vel) / 2; //linear_velocity
-  ang_Vel = (R_Vel - L_Vel) / wheel_wid; //angular_velocity
 
-  dif_Lpos = cnt_Lpos - prev_Lpos;
-  dif_Rpos = cnt_Rpos - prev_Rpos;
-  dis_L = dif_Lpos * thick_F /10000; //diff_l
-  dis_R = dif_Rpos * thick_F /10000; //diff_r
+  dif_Lpos = cnt_Lpos - prev_Lpos; //diff_l
+  dif_Rpos = cnt_Rpos - prev_Rpos; //diff_r
+  dis_L = dif_Lpos * thick_F /10000; //dis_l
+  dis_R = dif_Rpos * thick_F /10000; //dis_r
   
   dis = (dis_L + dis_R) / 2; //dist
-  encoder_yaw_new = (dis_R - dis_L) / wheel_wid; //theta
+  encoder_yaw_new = atan2(dis_R - dis_L, wheel_wid); //theta
   
   encoder_yaw += encoder_yaw_new; //theta_
   if(encoder_yaw > 2*PI)
@@ -210,42 +165,11 @@ void coordinate()
   encoder_yaw_q[2] = cos(0) * sin(0) * cos(encoder_yaw/2) + sin(0) * cos(0) * sin(encoder_yaw/2);
   encoder_yaw_q[3] = cos(0) * cos(0) * sin(encoder_yaw/2) - sin(0) * sin(0) * cos(encoder_yaw/2);
 
-  dxl_x += dis * cos(encoder_yaw_new); //pose_x_
-  dxl_y += dis * sin(encoder_yaw_new); //pose_y_
-  dxl_theta = encoder_yaw;
+  dxl_x += dis * cos(encoder_yaw); //pose_x_
+  dxl_y += dis * sin(encoder_yaw); //pose_y_
 
   prev_Lpos = cnt_Lpos;
   prev_Rpos = cnt_Rpos;
-  
-  
-  imu_msg.angular_velocity_covariance[0] = 0.02;
-  imu_msg.angular_velocity_covariance[1] = 0;
-  imu_msg.angular_velocity_covariance[2] = 0;
-  imu_msg.angular_velocity_covariance[3] = 0;
-  imu_msg.angular_velocity_covariance[4] = 0.02;
-  imu_msg.angular_velocity_covariance[5] = 0;
-  imu_msg.angular_velocity_covariance[6] = 0;
-  imu_msg.angular_velocity_covariance[7] = 0;
-  imu_msg.angular_velocity_covariance[8] = 0.02;
-  imu_msg.linear_acceleration_covariance[0] = 0.04;
-  imu_msg.linear_acceleration_covariance[1] = 0;
-  imu_msg.linear_acceleration_covariance[2] = 0;
-  imu_msg.linear_acceleration_covariance[3] = 0;
-  imu_msg.linear_acceleration_covariance[4] = 0.04;
-  imu_msg.linear_acceleration_covariance[5] = 0;
-  imu_msg.linear_acceleration_covariance[6] = 0;
-  imu_msg.linear_acceleration_covariance[7] = 0;
-  imu_msg.linear_acceleration_covariance[8] = 0.04;
-  
-  imu_msg.orientation_covariance[0] = 0.0025;
-  imu_msg.orientation_covariance[1] = 0;
-  imu_msg.orientation_covariance[2] = 0;
-  imu_msg.orientation_covariance[3] = 0;
-  imu_msg.orientation_covariance[4] = 0.0025;
-  imu_msg.orientation_covariance[5] = 0;
-  imu_msg.orientation_covariance[6] = 0;
-  imu_msg.orientation_covariance[7] = 0;
-  imu_msg.orientation_covariance[8] = 0.0025;
   
 
   //Publish
@@ -279,6 +203,7 @@ void coordinate()
   imu_pub.publish(&imu_msg);
 
   pose_pub.publish(&pose_msg);
+  yaw_pub.publish(&yaw_msg);
 
   tfbroadcaster.sendTransform(tfs_msg);
 }
