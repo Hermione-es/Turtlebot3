@@ -59,7 +59,7 @@ double wheel_wid = 0.16; //turtlebot3_burger's width
 double wheel_rad = 0.033; //turtlebot3_burger's radius
 double G = 1; // turtlebot3 gear ratio (XL430-W250)
 double Re = 4096; // turtlebot3 encoder's resolution (XL430-W250)
-double thick_F = (wheel_rad*2*PI)/(G*Re) *10000;
+double thick_F = (wheel_rad*2*PI)/(G*Re) *10000; //1thick's distance
 
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 using namespace ControlTableItem;
@@ -98,6 +98,7 @@ void setup()
   nh.initNode();
   nh.advertise(imu_pub);
   nh.advertise(pose_pub);
+  nh.advertise(yaw_pub);
   tfbroadcaster.init(nh);
 
   mpu.begin();
@@ -160,7 +161,7 @@ void coordinate()
     encoder_yaw += 2*PI;
   }
   
-  encoder_yaw_q[0] = cos(0) * cos(0) * cos(encoder_yaw/2) + sin(0) * sin(0) * sin(encoder_yaw/2);
+  encoder_yaw_q[0] = cos(0) * cos(0) * cos(encoder_yaw/2) + sin(0) * sin(0) * sin(encoder_yaw/2); //encoder_yaw's quetarnian
   encoder_yaw_q[1] = sin(0) * cos(0) * cos(encoder_yaw/2) - cos(0) * sin(0) * sin(encoder_yaw/2);
   encoder_yaw_q[2] = cos(0) * sin(0) * cos(encoder_yaw/2) + sin(0) * cos(0) * sin(encoder_yaw/2);
   encoder_yaw_q[3] = cos(0) * cos(0) * sin(encoder_yaw/2) - sin(0) * sin(0) * cos(encoder_yaw/2);
@@ -173,6 +174,8 @@ void coordinate()
   
 
   //Publish
+  yaw_msg.data = encoder_yaw*180/PI;
+  
   imu_msg.header.stamp = nh.now();
   imu_msg.header.frame_id = "imu_link";
 
@@ -204,6 +207,8 @@ void coordinate()
 
   pose_pub.publish(&pose_msg);
   yaw_pub.publish(&yaw_msg);
+
+
 
   tfbroadcaster.sendTransform(tfs_msg);
 }
