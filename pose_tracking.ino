@@ -29,7 +29,7 @@ double L_RPM;
 double R_RPM;
 double lin_Vel;
 double ang_Vel;
-double encoder_yaw = 0;
+double encoder_yaw;
 double encoder_yaw_q[4];
 double encoder_yaw_new = 0;
 double cnt_Lpos;
@@ -44,9 +44,9 @@ double dis = 0;
 double dxl_x_new;
 double dxl_y_new;
 
-double yaw = 0;
-double dxl_x = 0;
-double dxl_y = 0;
+double yaw;
+double dxl_x;
+double dxl_y;
 double dxl_theta = 0;
 double set_lin;
 double set_ang;
@@ -239,6 +239,54 @@ void setup()
   //initial value set
   prev_Lpos = dxl.getPresentPosition(LEFT_ID);
   prev_Rpos = dxl.getPresentPosition(RIGHT_ID);
+  encoder_yaw = 0;
+  dxl_x = 0;
+  dxl_y = 0;
+  posx[0] = 0;
+  posx[1] = 0;
+  posx[2] = 0;
+  posy[0] = 0;
+  posy[1] = 0;
+  posy[2] = 0;
+  pospx[0] = 0;
+  pospx[1] = 0;
+  pospx[2] = 0;
+  pospy[0] = 0;
+  pospy[1] = 0;
+  pospy[2] = 0;
+  x[0] = 1;
+  x[1] = 0;
+  x[2] = 0;
+  x[3] = 0;
+  yaw = 0;
+
+  imu_msg.angular_velocity_covariance[0] = 0.02;
+  imu_msg.angular_velocity_covariance[1] = 0;
+  imu_msg.angular_velocity_covariance[2] = 0;
+  imu_msg.angular_velocity_covariance[3] = 0;
+  imu_msg.angular_velocity_covariance[4] = 0.02;
+  imu_msg.angular_velocity_covariance[5] = 0;
+  imu_msg.angular_velocity_covariance[6] = 0;
+  imu_msg.angular_velocity_covariance[7] = 0;
+  imu_msg.angular_velocity_covariance[8] = 0.02;
+  imu_msg.linear_acceleration_covariance[0] = 0.04;
+  imu_msg.linear_acceleration_covariance[1] = 0;
+  imu_msg.linear_acceleration_covariance[2] = 0;
+  imu_msg.linear_acceleration_covariance[3] = 0;
+  imu_msg.linear_acceleration_covariance[4] = 0.04;
+  imu_msg.linear_acceleration_covariance[5] = 0;
+  imu_msg.linear_acceleration_covariance[6] = 0;
+  imu_msg.linear_acceleration_covariance[7] = 0;
+  imu_msg.linear_acceleration_covariance[8] = 0.04;
+  imu_msg.orientation_covariance[0] = 0.0025;
+  imu_msg.orientation_covariance[1] = 0;
+  imu_msg.orientation_covariance[2] = 0;
+  imu_msg.orientation_covariance[3] = 0;
+  imu_msg.orientation_covariance[4] = 0.0025;
+  imu_msg.orientation_covariance[5] = 0;
+  imu_msg.orientation_covariance[6] = 0;
+  imu_msg.orientation_covariance[7] = 0;
+  imu_msg.orientation_covariance[8] = 0.0025;
 }
 
 void loop()
@@ -259,13 +307,17 @@ void coordinate()
   cnt_Rpos = dxl.getPresentPosition(RIGHT_ID);
   L_RPM = dxl.getPresentVelocity(LEFT_ID,UNIT_RPM);
   R_RPM = dxl.getPresentVelocity(RIGHT_ID,UNIT_RPM);
+  
+  L_Vel = 2 * PI * wheel_rad * L_RPM / 60; //RPM to RAW
+  R_Vel = 2 * PI * wheel_rad * R_RPM / 60; //RPM to RAW
+  lin_Vel = (L_Vel + R_Vel) / 2; //linear_velocity
+  ang_Vel = (R_Vel - L_Vel) / wheel_wid; //angular_velocity
 
   dif_Lpos = cnt_Lpos - prev_Lpos; //diff_l
   dif_Rpos = cnt_Rpos - prev_Rpos; //diff_r
   dis_L = dif_Lpos * thick_F /10000; //dis_l
   dis_R = dif_Rpos * thick_F /10000; //dis_r
 
-  
   dis = (dis_L + dis_R) / 2; //dist
   encoder_yaw_new = atan2(dis_R - dis_L, wheel_wid); //theta
 
@@ -293,35 +345,6 @@ void coordinate()
   
   mpu.gyro_get_adc();
   mpu.acc_get_adc();
-  
-  imu_msg.angular_velocity_covariance[0] = 0.02;
-  imu_msg.angular_velocity_covariance[1] = 0;
-  imu_msg.angular_velocity_covariance[2] = 0;
-  imu_msg.angular_velocity_covariance[3] = 0;
-  imu_msg.angular_velocity_covariance[4] = 0.02;
-  imu_msg.angular_velocity_covariance[5] = 0;
-  imu_msg.angular_velocity_covariance[6] = 0;
-  imu_msg.angular_velocity_covariance[7] = 0;
-  imu_msg.angular_velocity_covariance[8] = 0.02;
-  imu_msg.linear_acceleration_covariance[0] = 0.04;
-  imu_msg.linear_acceleration_covariance[1] = 0;
-  imu_msg.linear_acceleration_covariance[2] = 0;
-  imu_msg.linear_acceleration_covariance[3] = 0;
-  imu_msg.linear_acceleration_covariance[4] = 0.04;
-  imu_msg.linear_acceleration_covariance[5] = 0;
-  imu_msg.linear_acceleration_covariance[6] = 0;
-  imu_msg.linear_acceleration_covariance[7] = 0;
-  imu_msg.linear_acceleration_covariance[8] = 0.04;
-  
-  imu_msg.orientation_covariance[0] = 0.0025;
-  imu_msg.orientation_covariance[1] = 0;
-  imu_msg.orientation_covariance[2] = 0;
-  imu_msg.orientation_covariance[3] = 0;
-  imu_msg.orientation_covariance[4] = 0.0025;
-  imu_msg.orientation_covariance[5] = 0;
-  imu_msg.orientation_covariance[6] = 0;
-  imu_msg.orientation_covariance[7] = 0;
-  imu_msg.orientation_covariance[8] = 0.0025;
   
   //sensor value
   gyro[0] = mpu.gyroADC[ROLL]*0.00106;
@@ -479,17 +502,22 @@ void coordinate()
 
   //Position X Priori System Estimate : Encoder
   double A3[9] = {1, dt, dt*dt/2, 0 , 1, dt, 0, 0, 1};
-  matrix_dot(pospx, A3, posx, 3, 3, 1);
-
-  double Pp_a3[9];
-  matrix_dot(Pp_a3, A3, P3x, 3, 3, 3);
-
   double A_T3[9] = {A3[0], A3[3], A3[6], A3[1], A3[4], A3[7], A3[2], A3[5], A3[8]};
-  double Pp_A3[9];
+  
+  double Pp_a3x[9];
+  double Pp_A3x[9];
+  matrix_dot(pospx, A3, posx, 3, 3, 1);
+  matrix_dot(Pp_a3x, A3, P3x, 3, 3, 3);
+  matrix_dot(Pp_A3x, Pp_a3x, A_T3, 3, 3, 3);
+  double Pp3x[9] = {Pp_A3x[0]+Q3[0], Pp_A3x[1]+Q3[1], Pp_A3x[2]+Q3[2], Pp_A3x[3]+Q3[3], Pp_A3x[4]+Q3[4], Pp_A3x[5]+Q3[5], Pp_A3x[6]+Q3[6], Pp_A3x[7]+Q3[7], Pp_A3x[8]+Q3[8]};
 
-  matrix_dot(Pp_A3, Pp_a3, A_T3, 3, 3, 3);
-
-  double Pp3[9] = {Pp_A3[0]+Q3[0], Pp_A3[1]+Q3[1], Pp_A3[2]+Q3[2], Pp_A3[3]+Q3[3], Pp_A3[4]+Q3[4], Pp_A3[5]+Q3[5], Pp_A3[6]+Q3[6], Pp_A3[7]+Q3[7], Pp_A3[8]+Q3[8]};
+  //Position Y Priori System Estimate : Encoder
+  double Pp_a3y[9];
+  double Pp_A3y[9];
+  matrix_dot(pospy, A3, posy, 3, 3, 1);
+  matrix_dot(Pp_a3y, A3, P3y, 3, 3, 3);
+  matrix_dot(Pp_A3y, Pp_a3y, A_T3, 3, 3, 3);
+  double Pp3y[9] = {Pp_A3y[0]+Q3[0], Pp_A3y[1]+Q3[1], Pp_A3y[2]+Q3[2], Pp_A3y[3]+Q3[3], Pp_A3y[4]+Q3[4], Pp_A3y[5]+Q3[5], Pp_A3y[6]+Q3[6], Pp_A3y[7]+Q3[7], Pp_A3y[8]+Q3[8]};
 
   //Position X Correction Stage : with IMU position
   z3[0] = dxl_x - pospx[0];
@@ -497,61 +525,41 @@ void coordinate()
   z3[2] = local_acc_x - pospx[2];
   
   double Pp_h3[9];
-  matrix_dot(Pp_h3, H3, Pp3, 3, 3, 3);
-
   double Pp_H3[3];
-  matrix_dot(Pp_H3, Pp_h3, H3, 3, 3, 3);
-
   double R_v3[9];
-  matrix_dot(R_v3, V, R, 3, 3, 3);
-
   double R_V3[9];
+  double inverse_temp3[9];
+  double H_ti3[9];
+  double qe3[3];
+  double K_h3[9];
+  
+  matrix_dot(Pp_h3, H3, Pp3x, 3, 3, 3);
+  matrix_dot(Pp_H3, Pp_h3, H3, 3, 3, 3);
+  matrix_dot(R_v3, V, R, 3, 3, 3);
   matrix_dot(R_V3, R_v3, V, 3, 3, 3);
 
   double temp3[9] = {Pp_H3[0]+R_V3[0], Pp_H3[1]+R_V3[1], Pp_H3[2]+R_V3[2], Pp_H3[3]+R_V3[3], Pp_H3[4]+R_V3[4], Pp_H3[5]+R_V3[5], Pp_H3[6]+R_V3[6], Pp_H3[7]+R_V3[7], Pp_H3[8]+R_V3[8]};
-  double inverse_temp3[9];
-
   InverseMatrix3(temp3, inverse_temp3);
 
-  double H_ti3[9];
-
-  matrix_dot(H_ti3, Pp3, H3, 3, 3, 3);
+  matrix_dot(H_ti3, Pp3x, H3, 3, 3, 3);
   matrix_dot(K3x, H_ti3, inverse_temp3, 3, 3, 3);
-
-  double qe3[3];
-
+  
   matrix_dot(qe3, K3x, z3, 3, 3, 1);
   posx[0] = pospx[0] + qe3[0];
   posx[1] = pospx[1] + qe3[1];
   posx[2] = pospx[2] + qe3[2];
 
-  double K_h3[9];
   matrix_dot(K_h3, K3x, H3, 3, 3, 3);
-  
   double I_Kh3[9] = { 1 - K_h3[0], -K_h3[1], -K_h3[2], -K_h3[3], 1-K_h3[4], -K_h3[5], -K_h3[6], -K_h3[7], 1-K_h3[8]};
-  matrix_dot(P3x, I_Kh3, Pp3, 3, 3, 3);
+  matrix_dot(P3x, I_Kh3, Pp3x, 3, 3, 3);
 
-  //Position Y Priori System Estimate : Encoder
-  matrix_dot(pospy, A3, posy, 3, 3, 1);
-  matrix_dot(Pp_a3, A3, P3y, 3, 3, 3);
-  matrix_dot(Pp_A3, Pp_a3, A_T3, 3, 3, 3);
-
-  Pp3[0] = Pp_A3[0]+Q3[0];
-  Pp3[1] = Pp_A3[1]+Q3[1];
-  Pp3[2] = Pp_A3[2]+Q3[2];
-  Pp3[3] = Pp_A3[3]+Q3[3];
-  Pp3[4] = Pp_A3[4]+Q3[4];
-  Pp3[5] = Pp_A3[5]+Q3[5];
-  Pp3[6] = Pp_A3[6]+Q3[6];
-  Pp3[7] = Pp_A3[7]+Q3[7];
-  Pp3[8] = Pp_A3[8]+Q3[8];
   
   //Position Y Correction Stage : with IMU position
   z4[0] = dxl_y - pospy[0];
   z4[1] = lin_Vel*sin(encoder_yaw) - pospy[1];
   z4[2] = local_acc_y - pospy[2];
   
-  matrix_dot(Pp_h3, H3, Pp3, 3, 3, 3);
+  matrix_dot(Pp_h3, H3, Pp3y, 3, 3, 3);
   matrix_dot(Pp_H3, Pp_h3, H3, 3, 3, 3);
 
   double temp4[9] = {Pp_H3[0]+R_V3[0], Pp_H3[1]+R_V3[1], Pp_H3[2]+R_V3[2], Pp_H3[3]+R_V3[3], Pp_H3[4]+R_V3[4], Pp_H3[5]+R_V3[5], Pp_H3[6]+R_V3[6], Pp_H3[7]+R_V3[7], Pp_H3[8]+R_V3[8]};
@@ -559,7 +567,7 @@ void coordinate()
 
   InverseMatrix3(temp4, inverse_temp4);
 
-  matrix_dot(H_ti3, Pp3, H3, 3, 3, 3);
+  matrix_dot(H_ti3, Pp3y, H3, 3, 3, 3);
   matrix_dot(K3y, H_ti3, inverse_temp4, 3, 3, 3);
   matrix_dot(qe3, K3y, z4, 3, 3, 1);
 
@@ -579,10 +587,10 @@ void coordinate()
   I_Kh3[9] = -K_h3[7];
   I_Kh3[9] = 1- K_h3[8];
 
-  matrix_dot(P3y, I_Kh3, Pp3, 3, 3, 3);
+  matrix_dot(P3y, I_Kh3, Pp3y, 3, 3, 3);
 
-  //Publish
-  yaw_msg.data = encoder_yaw*180/PI;
+  //////////////////// Publish ////////////////////////////////////////////////////////
+  yaw_msg.data = yaw*180/PI;
   
   imu_msg.header.stamp = nh.now();
   imu_msg.header.frame_id = "imu_link";
@@ -618,7 +626,7 @@ void coordinate()
 
   tfs_msg.transform.rotation.w = pose_msg.pose.orientation.w;
   tfs_msg.transform.rotation.x = pose_msg.pose.orientation.x;
-  tfs_msg.transform.rotation.y = pose_msg.pose.orientation.y;
+  tfs_msg.transform.rotation.y = -pose_msg.pose.orientation.y;
   tfs_msg.transform.rotation.z = pose_msg.pose.orientation.z;
 
   tfs_msg.transform.translation.x = pose_msg.pose.position.x;
