@@ -121,6 +121,15 @@ void setup()
   //initial value set
   prev_Lpos = dxl.getPresentPosition(LEFT_ID);
   prev_Rpos = dxl.getPresentPosition(RIGHT_ID);
+
+  encoder_yaw = 0;
+  encoder_yaw_q[0] = 0;
+  encoder_yaw_q[1] = 0;
+  encoder_yaw_q[2] = 0;
+  encoder_yaw_q[3] = 0;
+  dxl_x = 0;
+  dxl_y = 0;
+  
 }
 
 void loop()
@@ -145,8 +154,8 @@ void coordinate()
 
   dif_Lpos = cnt_Lpos - prev_Lpos; //diff_l
   dif_Rpos = cnt_Rpos - prev_Rpos; //diff_r
-  dis_L = dif_Lpos * thick_F /10000; //dis_l
-  dis_R = dif_Rpos * thick_F /10000; //dis_r
+  dis_L = dif_Lpos * thick_F; //dis_l
+  dis_R = dif_Rpos * thick_F; //dis_r
   
   dis = (dis_L + dis_R) / 2; //dist
   encoder_yaw_new = atan2(dis_R - dis_L, wheel_wid); //theta
@@ -174,7 +183,7 @@ void coordinate()
   
 
   //Publish
-  yaw_msg.data = encoder_yaw*180/PI;
+  yaw_msg.data = encoder_yaw*180/PI/10000;
   
   imu_msg.header.stamp = nh.now();
   imu_msg.header.frame_id = "imu_link";
@@ -182,8 +191,8 @@ void coordinate()
   pose_msg.header.stamp = nh.now();
   pose_msg.header.frame_id = "map";
 
-  pose_msg.pose.position.x = dxl_x;
-  pose_msg.pose.position.y = dxl_y;
+  pose_msg.pose.position.x = dxl_x/10000;
+  pose_msg.pose.position.y = dxl_y/10000;
   pose_msg.pose.position.z = 0;
 
   pose_msg.pose.orientation.w = encoder_yaw_q[0];
@@ -195,7 +204,7 @@ void coordinate()
   tfs_msg.header.frame_id = "map";
   tfs_msg.child_frame_id  = "imu_link";
 
-  tfs_msg.transform.rotation.w = pose_msg.pose.orientation.w;
+  tfs_msg.transform.rotation.w = -pose_msg.pose.orientation.w;
   tfs_msg.transform.rotation.x = pose_msg.pose.orientation.x;
   tfs_msg.transform.rotation.y = pose_msg.pose.orientation.y;
   tfs_msg.transform.rotation.z = pose_msg.pose.orientation.z;
@@ -208,7 +217,10 @@ void coordinate()
   pose_pub.publish(&pose_msg);
   yaw_pub.publish(&yaw_msg);
 
-
-
   tfbroadcaster.sendTransform(tfs_msg);
+}
+
+void test()
+{
+  
 }
