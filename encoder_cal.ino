@@ -1,106 +1,32 @@
-#include <ros.h>
-#include <std_msgs/String.h>
-#include <geometry_msgs/Twist.h>
-#include <sensor_msgs/Imu.h>
-#include <geometry_msgs/PoseStamped.h>
-#include <std_msgs/Float64.h>
-#include <tf/tf.h>
-#include <tf/transform_broadcaster.h>
-#include <math.h>
-#include <Dynamixel2Arduino.h>
-#include <MPU9250.h>
-
-cMPU9250 mpu;
-
-#define DXL_SERIAL Serial3
-#define DEBUG_SERIAL Serial
-
-///////////////////////////////////////
-const uint8_t PERIOD = 20;
-double dt = 0.02;
-///////////////////////////////////////
+#include "encoder_cal_config.h"
 const uint8_t DXL_DIR_PIN = 84;
 const uint8_t RIGHT_ID = 1;
 const uint8_t LEFT_ID = 2;
 const double DXL_PROTOCOL_VERSION = 2.0;
-double L_Vel;
-double R_Vel;
-double L_RPM;
-double R_RPM;
-double lin_Vel;
-double ang_Vel;
-double encoder_yaw = 0;
-double encoder_yaw_q[4];
-double encoder_yaw_new = 0;
-double cnt_Lpos;
-double cnt_Rpos;
-double prev_Lpos=0;
-double prev_Rpos=0;
-double dif_Lpos;
-double dif_Rpos;
-double dis_L;
-double dis_R;
-double dis = 0;
-double dxl_x_new;
-double dxl_y_new;
 
-double yaw = 0;
-double dxl_x = 0;
-double dxl_y = 0;
-double dxl_theta = 0;
-double set_lin;
-double set_ang;
-double set_Lvel;
-double set_Rvel;
-double set_LRPM;
-double set_RRPM;
-
-double wheel_wid = 0.16; //turtlebot3_burger's width
-double wheel_rad = 0.033; //turtlebot3_burger's radius
-double G = 1; // turtlebot3 gear ratio (XL430-W250)
-double Re = 4096; // turtlebot3 encoder's resolution (XL430-W250)
-double thick_F = (wheel_rad*2*PI)/(G*Re) *10000; //1thick's distance
-
+cMPU9250 mpu;
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 using namespace ControlTableItem;
 
-void twistMessageReceived(const geometry_msgs::Twist& msg)
-{
-  
-  set_lin = msg.linear.x;
-  set_ang = msg.angular.z;
-  set_Lvel = set_lin + (set_ang * wheel_wid / 2); //target_speed_l
-  set_Rvel = set_lin - (set_ang * wheel_wid / 2); //target_speed_r
-  set_LRPM = set_Lvel * 60 / 2 / PI / wheel_rad; //RAW to RPM
-  set_RRPM = set_Rvel * 60 / 2 / PI / wheel_rad; //RAW to RPM
-  
-  dxl.setGoalVelocity(LEFT_ID, set_LRPM, UNIT_RPM);
-  dxl.setGoalVelocity(RIGHT_ID, set_RRPM, UNIT_RPM);
 
-}
-
-ros::NodeHandle nh;
-sensor_msgs::Imu imu_msg;
-geometry_msgs::PoseStamped pose_msg;
-std_msgs::Float64 yaw_msg;
-ros::Publisher imu_pub("kalamn_orientation", &imu_msg);
-ros::Publisher pose_pub("pose", &pose_msg);
-ros::Publisher yaw_pub("yaw", &yaw_msg);
-geometry_msgs::TransformStamped tfs_msg;
-tf::TransformBroadcaster tfbroadcaster;
-ros::Subscriber<geometry_msgs::Twist> teleop_sub("cmd_vel",&twistMessageReceived);
-
-
+/*******************************************************************************
+* Setup function
+*******************************************************************************/
 void setup()
 {
   Serial.begin(115200);
 
   nh.initNode();
+  
+  nh.subscribe(teleop_sub);
+  
   nh.advertise(imu_pub);
   nh.advertise(pose_pub);
   nh.advertise(yaw_pub);
+  
   tfbroadcaster.init(nh);
 
+  //Dynamixel setting
   mpu.begin();
 
   DEBUG_SERIAL.begin(115200);
@@ -116,73 +42,70 @@ void setup()
   dxl.torqueOn(RIGHT_ID);
   dxl.writeControlTableItem(DRIVE_MODE, LEFT_ID, 0);
   dxl.writeControlTableItem(DRIVE_MODE, RIGHT_ID, 0);
-  nh.subscribe(teleop_sub);
 
-  //initial value set
-  prev_Lpos = dxl.getPresentPosition(LEFT_ID);
-  prev_Rpos = dxl.getPresentPosition(RIGHT_ID);
+  //Initialize
+  _init_();
+  _initCov_();
 
-  encoder_yaw = 0;
-  encoder_yaw_q[0] = 0;
-  encoder_yaw_q[1] = 0;
-  encoder_yaw_q[2] = 0;
-  encoder_yaw_q[3] = 0;
-  dxl_x = 0;
-  dxl_y = 0;
-  
 }
 
+/*******************************************************************************
+* Loop function
+*******************************************************************************/
 void loop()
 {
-
-  static uint32_t pre_time;
-  if (millis()-pre_time >= PERIOD)
+  
+  if(millis() < 30000)
   {
-    pre_time = millis();
-    coordinate();
+    if (millis()-pre_time >= PERIOD)
+    {
+      pre_time = millis();
+      coordinate();
+      publishMsg();
+    }
+  }
+
+  else
+  {
+    backOrigin();
+    if (millis()-pre_time >= PERIOD)
+    {
+      pre_time = millis();
+      coordinate();
+      publishMsg();
+    }
+
+    if (finish == 1) 
+    {
+      exit(0);
+    }
   }
   nh.spinOnce();
 }
 
-void coordinate()
+/*******************************************************************************
+* Callback function for cmd_vel msg
+*******************************************************************************/
+void twistMessageReceived(const geometry_msgs::Twist& msg)
 {
-
-  cnt_Lpos = dxl.getPresentPosition(LEFT_ID);
-  cnt_Rpos = dxl.getPresentPosition(RIGHT_ID);
-  L_RPM = dxl.getPresentVelocity(LEFT_ID,UNIT_RPM);
-  R_RPM = dxl.getPresentVelocity(RIGHT_ID,UNIT_RPM);
-
-  dif_Lpos = cnt_Lpos - prev_Lpos; //diff_l
-  dif_Rpos = cnt_Rpos - prev_Rpos; //diff_r
-  dis_L = dif_Lpos * thick_F; //dis_l
-  dis_R = dif_Rpos * thick_F; //dis_r
   
-  dis = (dis_L + dis_R) / 2; //dist
-  encoder_yaw_new = atan2(dis_R - dis_L, wheel_wid); //theta
+  set_lin = msg.linear.x;
+  set_ang = msg.angular.z;
+  set_Lvel = set_lin + (set_ang * WHEEL_WID / 2); //target_speed_l
+  set_Rvel = set_lin - (set_ang * WHEEL_WID / 2); //target_speed_r
+  set_LRPM = set_Lvel * 60 / 2 / PI / WHEEL_RAD; //RAW to RPM
+  set_RRPM = set_Rvel * 60 / 2 / PI / WHEEL_RAD; //RAW to RPM
   
-  encoder_yaw += encoder_yaw_new; //theta_
-  if(encoder_yaw > 2*PI)
-  {
-    encoder_yaw -= 2*PI;
-  }
-  else if(encoder_yaw < (-2)*PI)
-  {
-    encoder_yaw += 2*PI;
-  }
-  
-  encoder_yaw_q[0] = cos(0) * cos(0) * cos(encoder_yaw/2) + sin(0) * sin(0) * sin(encoder_yaw/2); //encoder_yaw's quetarnian
-  encoder_yaw_q[1] = sin(0) * cos(0) * cos(encoder_yaw/2) - cos(0) * sin(0) * sin(encoder_yaw/2);
-  encoder_yaw_q[2] = cos(0) * sin(0) * cos(encoder_yaw/2) + sin(0) * cos(0) * sin(encoder_yaw/2);
-  encoder_yaw_q[3] = cos(0) * cos(0) * sin(encoder_yaw/2) - sin(0) * sin(0) * cos(encoder_yaw/2);
+  dxl.setGoalVelocity(LEFT_ID, set_LRPM, UNIT_RPM);
+  dxl.setGoalVelocity(RIGHT_ID, set_RRPM, UNIT_RPM);
 
-  dxl_x += dis * cos(encoder_yaw); //pose_x_
-  dxl_y += dis * sin(encoder_yaw); //pose_y_
+}
 
-  prev_Lpos = cnt_Lpos;
-  prev_Rpos = cnt_Rpos;
-  
-
-  //Publish
+/*******************************************************************************
+* Publish msgs (IMU data, Pose data, Yaw data, tf)
+*******************************************************************************/
+void publishMsg()
+{
   yaw_msg.data = encoder_yaw*180/PI/10000;
   
   imu_msg.header.stamp = nh.now();
@@ -220,7 +143,119 @@ void coordinate()
   tfbroadcaster.sendTransform(tfs_msg);
 }
 
-void test()
+/*******************************************************************************
+* Back to origin
+*******************************************************************************/
+void backOrigin()
+{
+  dxl.setGoalVelocity(LEFT_ID, 0); //turtlebot3 Pause
+  dxl.setGoalVelocity(RIGHT_ID, 0);
+
+  dis = sqrt(pow(abs(dxl_x),2) + (pow(abs(dxl_y),2)));
+  
+  if  (dxl_x >= 0 and dxl_y >= 0) //case 1: +0
+  {
+    theta = atan2(abs(dxl_y),abs(dxl_x));
+  }      
+  else if(dxl_x >= 0 && dxl_y <  0) //case 2: -0
+  {
+    theta = -atan2(abs(dxl_y),abs(dxl_x));
+  }
+  else if(dxl_x <  0 && dxl_y <  0) //case 3: -(pi-0)
+  {
+    theta = -(PI - atan2(abs(dxl_y),abs(dxl_x)));
+  }
+  else if(dxl_x <  0 and dxl_y >= 0) //case 4: (pi-0)
+  {
+    theta = PI - atan2(abs(dxl_y),abs(dxl_x));
+  }
+
+  time2turn = theta / ang_z; //time to turn
+  time2go = dis / lin_x; //time to go
+  time2end1 = millis() + time2turn; //time to finish going
+  
+  while(millis() <= time2end1)
+  {
+    set_Lvel = (ang_z * WHEEL_WID / 2); //target_speed_l
+    set_Rvel = - (ang_z * WHEEL_WID / 2); //target_speed_r
+    set_LRPM = set_Lvel * 60 / 2 / PI / WHEEL_RAD; //RAW to RPM
+    set_RRPM = set_Rvel * 60 / 2 / PI / WHEEL_RAD; //RAW to RPM
+    
+    dxl.setGoalVelocity(LEFT_ID, set_LRPM, UNIT_RPM);
+    dxl.setGoalVelocity(RIGHT_ID, set_RRPM, UNIT_RPM);
+  }
+
+  time2end2 = millis() + time2go; //time to finish turning
+  while(millis() <= time2end2)
+  {
+    set_Lvel = set_lin; //target_speed_l
+    set_Rvel = set_lin; //target_speed_r
+    set_LRPM = set_Lvel * 60 / 2 / PI / WHEEL_RAD; //RAW to RPM
+    set_RRPM = set_Rvel * 60 / 2 / PI / WHEEL_RAD; //RAW to RPM
+  
+    dxl.setGoalVelocity(LEFT_ID, set_LRPM, UNIT_RPM);
+    dxl.setGoalVelocity(RIGHT_ID, set_RRPM, UNIT_RPM);
+  }
+  finish = 1;
+}
+
+/*******************************************************************************
+* Calculate the coordinate
+*******************************************************************************/
+void coordinate()
+{
+
+  cnt_Lpos = dxl.getPresentPosition(LEFT_ID);
+  cnt_Rpos = dxl.getPresentPosition(RIGHT_ID);
+  L_RPM = dxl.getPresentVelocity(LEFT_ID,UNIT_RPM);
+  R_RPM = dxl.getPresentVelocity(RIGHT_ID,UNIT_RPM);
+
+  dif_Lpos = cnt_Lpos - prev_Lpos; //diff_l
+  dif_Rpos = cnt_Rpos - prev_Rpos; //diff_r
+  dis_L = dif_Lpos * THICK_F_10000; //dis_l
+  dis_R = dif_Rpos * THICK_F_10000; //dis_r
+  
+  dis = (dis_L + dis_R) / 2; //dist
+  encoder_yaw_new = atan2(dis_R - dis_L, WHEEL_WID); //theta
+  
+  encoder_yaw += encoder_yaw_new; //theta_
+  if(encoder_yaw > 2*PI)
+  {
+    encoder_yaw -= 2*PI;
+  }
+  else if(encoder_yaw < (-2)*PI)
+  {
+    encoder_yaw += 2*PI;
+  }
+  
+  encoder_yaw_q[0] = cos(0) * cos(0) * cos(encoder_yaw/2) + sin(0) * sin(0) * sin(encoder_yaw/2); //encoder_yaw's quetarnian
+  encoder_yaw_q[1] = sin(0) * cos(0) * cos(encoder_yaw/2) - cos(0) * sin(0) * sin(encoder_yaw/2);
+  encoder_yaw_q[2] = cos(0) * sin(0) * cos(encoder_yaw/2) + sin(0) * cos(0) * sin(encoder_yaw/2);
+  encoder_yaw_q[3] = cos(0) * cos(0) * sin(encoder_yaw/2) - sin(0) * sin(0) * cos(encoder_yaw/2);
+
+  dxl_x += dis * cos(encoder_yaw); //pose_x_
+  dxl_y += dis * sin(encoder_yaw); //pose_y_
+
+  prev_Lpos = cnt_Lpos;
+  prev_Rpos = cnt_Rpos;
+  
+  
+} 
+
+/*******************************************************************************
+* Initialization
+*******************************************************************************/
+void _init_()
+{
+  prev_Lpos = dxl.getPresentPosition(LEFT_ID);
+  prev_Rpos = dxl.getPresentPosition(RIGHT_ID);
+  
+  encoder_yaw = 0;
+  dxl_x = 0;
+  dxl_y = 0;
+}
+
+void _initCov_()
 {
   
 }
