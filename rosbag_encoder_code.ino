@@ -1,6 +1,7 @@
 #include <ros.h>
 #include <std_msgs/String.h>
 #include <geometry_msgs/Twist.h>
+#include <geometry_msgs/Vector3.h>
 #include <sensor_msgs/Imu.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <std_msgs/Float64.h>
@@ -85,9 +86,14 @@ ros::NodeHandle nh;
 sensor_msgs::Imu imu_msg;
 geometry_msgs::PoseStamped pose_msg;
 std_msgs::Float64 yaw_msg;
+geometry_msgs::Vector3 lin_msg;
+geometry_msgs::Vector3 ang_msg;
+
 ros::Publisher imu_pub("encoder_orientation", &imu_msg);
 ros::Publisher pose_pub("pose", &pose_msg);
 ros::Publisher yaw_pub("yaw", &yaw_msg);
+ros::Publisher lin_pub("lin_vel", &lin_msg);
+ros::Publisher ang_pub("ang_vel", &ang_msg);
 geometry_msgs::TransformStamped tfs_msg;
 tf::TransformBroadcaster tfbroadcaster;
 ros::Subscriber<geometry_msgs::Twist> teleop_sub("cmd_vel",&twistMessageReceived);
@@ -101,6 +107,8 @@ void setup()
   nh.advertise(imu_pub);
   nh.advertise(pose_pub);
   nh.advertise(yaw_pub);
+  nh.advertise(lin_pub);
+  nh.advertise(ang_pub);
   tfbroadcaster.init(nh);
 
   mpu.begin();
@@ -156,6 +164,12 @@ void coordinate()
   L_RPM = dxl.getPresentVelocity(LEFT_ID,UNIT_RPM);
   R_RPM = dxl.getPresentVelocity(RIGHT_ID,UNIT_RPM);
 
+  L_Vel = 2 * PI * wheel_rad * L_RPM / 60; //left wheel welocity
+  R_Vel = 2 * PI * wheel_rad * R_RPM / 60; //right wheel velocity
+
+  lin_Vel = (L_Vel + R_Vel) /2; //linear_velocity
+  ang_Vel = (R_Vel - L_Vel) /0.16; //angular_velocity
+
   dif_Lpos = cnt_Lpos - prev_Lpos; //diff_l
   dif_Rpos = cnt_Rpos - prev_Rpos; //diff_r
   dis_L = dif_Lpos * thick_F; //dis_l
@@ -197,6 +211,9 @@ void coordinate()
 
   //Publish
   yaw_msg.data = encoder_yaw*180/PI;
+
+  lin_msg.x = lin_Vel;
+  ang_msg.z = ang_Vel;
   
   imu_msg.header.stamp = nh.now();
   imu_msg.header.frame_id = "imu_link";
@@ -218,7 +235,7 @@ void coordinate()
   pose_msg.header.frame_id = "map";
 
   pose_msg.pose.position.x = dxl_x/10000;
-  pose_msg.pose.position.y = dxl_y/10000;
+  pose_msg.pose.position.y = -dxl_y/10000;
   pose_msg.pose.position.z = 0;
 
   pose_msg.pose.orientation.w = encoder_yaw_q[0];
@@ -240,14 +257,10 @@ void coordinate()
   tfs_msg.transform.translation.z = 0.0;
   
   imu_pub.publish(&imu_msg);
-
+  lin_pub.publish(&lin_msg);
+  ang_pub.publish(&ang_msg);
   pose_pub.publish(&pose_msg);
   yaw_pub.publish(&yaw_msg);
 
   tfbroadcaster.sendTransform(tfs_msg);
-}
-
-void test()
-{
-  
 }
