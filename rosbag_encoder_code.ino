@@ -3,6 +3,7 @@
 #include <geometry_msgs/Twist.h>
 #include <geometry_msgs/Vector3.h>
 #include <sensor_msgs/Imu.h>
+#include <sensor_msgs/MagneticField.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <std_msgs/Float64.h>
 #include <tf/tf.h>
@@ -26,6 +27,7 @@ const uint8_t LEFT_ID = 2;
 const double DXL_PROTOCOL_VERSION = 2.0;
 double gyro[3];
 double acc[3];
+double mag[3];
 double L_Vel;
 double R_Vel;
 double L_RPM;
@@ -84,18 +86,21 @@ void twistMessageReceived(const geometry_msgs::Twist& msg)
 
 ros::NodeHandle nh;
 sensor_msgs::Imu imu_msg;
-geometry_msgs::PoseStamped pose_msg;
+sensor_msgs::MagneticField mag_msg;
+tf::TransformBroadcaster tfbroadcaster;
 std_msgs::Float64 yaw_msg;
+geometry_msgs::PoseStamped pose_msg;
 geometry_msgs::Vector3 lin_msg;
 geometry_msgs::Vector3 ang_msg;
+geometry_msgs::TransformStamped tfs_msg;
 
 ros::Publisher imu_pub("encoder_orientation", &imu_msg);
 ros::Publisher pose_pub("pose", &pose_msg);
 ros::Publisher yaw_pub("yaw", &yaw_msg);
 ros::Publisher lin_pub("lin_vel", &lin_msg);
 ros::Publisher ang_pub("ang_vel", &ang_msg);
-geometry_msgs::TransformStamped tfs_msg;
-tf::TransformBroadcaster tfbroadcaster;
+ros::Publisher mag_pub("magnetic_field", &mag_msg);
+
 ros::Subscriber<geometry_msgs::Twist> teleop_sub("cmd_vel",&twistMessageReceived);
 
 
@@ -104,11 +109,14 @@ void setup()
   Serial.begin(115200);
 
   nh.initNode();
+  
   nh.advertise(imu_pub);
   nh.advertise(pose_pub);
   nh.advertise(yaw_pub);
   nh.advertise(lin_pub);
   nh.advertise(ang_pub);
+  nh.advertise(mag_pub);
+
   tfbroadcaster.init(nh);
 
   mpu.begin();
@@ -158,6 +166,7 @@ void coordinate()
 {
   mpu.gyro_get_adc();
   mpu.acc_get_adc();
+  mpu.mag_get_adc();
 
   cnt_Lpos = dxl.getPresentPosition(LEFT_ID);
   cnt_Rpos = dxl.getPresentPosition(RIGHT_ID);
@@ -200,15 +209,18 @@ void coordinate()
   prev_Rpos = cnt_Rpos;
 
   //sensor value
-  gyro[0] = mpu.gyroADC[ROLL]*0.00106;
-  gyro[1] = mpu.gyroADC[PITCH]*0.00106;
-  gyro[2] = mpu.gyroADC[YAW]*0.00106; // *3.14/180/16.4 = *0.00106
+  gyro[0] = mpu.gyroADC[ROLL]*0.0010642;
+  gyro[1] = mpu.gyroADC[PITCH]*0.0010642;
+  gyro[2] = mpu.gyroADC[YAW]*0.0010642; // *3.14/180/16.4 = *0.00106
   
-  acc[0] = mpu.accADC[ROLL]*0.0006;
-  acc[1] = mpu.accADC[PITCH]*0.0006;
-  acc[2] = mpu.accADC[YAW]*0.0006; //*9.8/16384
-  
+  acc[0] = mpu.accADC[ROLL]*0.000598550415;
+  acc[1] = mpu.accADC[PITCH]*0.000598550415;
+  acc[2] = mpu.accADC[YAW]*0.000598550415; //*9.8/16384 = *0.0006
 
+  mag[0] = mpu.magADC[ROLL]*(15e-8);
+  mag[1] = mpu.magADC[PITCH]*(15e-8);
+  mag[2] = mpu.magADC[YAW]*(15e-8);
+  
   //Publish
   yaw_msg.data = encoder_yaw*180/PI;
 
@@ -230,6 +242,13 @@ void coordinate()
   imu_msg.linear_acceleration.x = acc[0];
   imu_msg.linear_acceleration.y = acc[1];
   imu_msg.linear_acceleration.z = acc[2];
+  
+  mag_msg.header.stamp    = nh.now();
+  mag_msg.header.frame_id = "mag_link";
+  
+  mag_msg.magnetic_field.x = mag[0];
+  mag_msg.magnetic_field.y = mag[1];
+  mag_msg.magnetic_field.z = mag[2];
 
   pose_msg.header.stamp = nh.now();
   pose_msg.header.frame_id = "map";
@@ -257,6 +276,7 @@ void coordinate()
   tfs_msg.transform.translation.z = 0.0;
   
   imu_pub.publish(&imu_msg);
+  mag_pub.publish(&mag_msg);
   lin_pub.publish(&lin_msg);
   ang_pub.publish(&ang_msg);
   pose_pub.publish(&pose_msg);
